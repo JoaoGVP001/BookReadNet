@@ -12,7 +12,20 @@ class BibliotecaApp:
         self.root = root
         self.biblioteca = biblioteca
         self.root.title("BookReadNet")
-        self.root.geometry("900x600")
+        self.root.geometry("980x650")
+        self.root.minsize(900, 600)
+
+        estilo = ttk.Style()
+        estilo.theme_use("clam")
+
+        cabecalho = ttk.Frame(root, padding=(18, 16))
+        cabecalho.pack(fill="x")
+        ttk.Label(cabecalho, text="BookReadNet", font=("Segoe UI", 20, "bold")).pack(anchor="w")
+        ttk.Label(
+            cabecalho,
+            text="Sistema de biblioteca em Python com POO e Tkinter",
+            font=("Segoe UI", 10),
+        ).pack(anchor="w", pady=(4, 0))
 
         self.notebook = ttk.Notebook(root)
         self.notebook.pack(fill="both", expand=True)
@@ -43,6 +56,7 @@ class BibliotecaApp:
         ttk.Button(frame, text="Cadastrar livro", command=self.cadastrar_livro).grid(row=4, column=0, pady=8)
         ttk.Button(frame, text="Excluir livro", command=self.excluir_livro).grid(row=4, column=1, pady=8, sticky="w")
         ttk.Button(frame, text="Atualizar lista", command=self.atualizar_livros).grid(row=4, column=2, pady=8, sticky="w")
+        ttk.Button(frame, text="Limpar campos", command=self.limpar_campos_livro).grid(row=4, column=3, pady=8, sticky="w")
 
         self.lista_livros = tk.Listbox(frame, width=110, height=18)
         self.lista_livros.grid(row=5, column=0, columnspan=3, sticky="nsew", pady=10)
@@ -67,6 +81,7 @@ class BibliotecaApp:
         ttk.Button(frame, text="Cadastrar usuário", command=self.cadastrar_usuario).grid(row=3, column=0, pady=8)
         ttk.Button(frame, text="Excluir usuário", command=self.excluir_usuario).grid(row=3, column=1, pady=8, sticky="w")
         ttk.Button(frame, text="Atualizar lista", command=self.atualizar_usuarios).grid(row=3, column=2, pady=8, sticky="w")
+        ttk.Button(frame, text="Limpar campos", command=self.limpar_campos_usuario).grid(row=3, column=3, pady=8, sticky="w")
 
         self.lista_usuarios = tk.Listbox(frame, width=110, height=18)
         self.lista_usuarios.grid(row=4, column=0, columnspan=3, sticky="nsew", pady=10)
@@ -86,6 +101,7 @@ class BibliotecaApp:
         ttk.Button(frame, text="Emprestar", command=self.realizar_emprestimo).grid(row=2, column=0, pady=8)
         ttk.Button(frame, text="Devolver", command=self.realizar_devolucao).grid(row=2, column=1, pady=8, sticky="w")
         ttk.Button(frame, text="Atualizar lista", command=self.atualizar_emprestimos).grid(row=2, column=2, pady=8, sticky="w")
+        ttk.Button(frame, text="Limpar campos", command=self.limpar_campos_emprestimo).grid(row=2, column=3, pady=8, sticky="w")
 
         self.lista_emprestimos = tk.Listbox(frame, width=110, height=18)
         self.lista_emprestimos.grid(row=3, column=0, columnspan=3, sticky="nsew", pady=10)
@@ -164,3 +180,18 @@ class BibliotecaApp:
         self.atualizar_livros()
         self.atualizar_usuarios()
         self.atualizar_emprestimos()
+
+    def limpar_campos_livro(self) -> None:
+        self.livro_id.set("")
+        self.livro_titulo.set("")
+        self.livro_autor.set("")
+        self.livro_categoria.set("")
+
+    def limpar_campos_usuario(self) -> None:
+        self.usuario_nome.set("")
+        self.usuario_email.set("")
+        self.usuario_matricula.set("")
+
+    def limpar_campos_emprestimo(self) -> None:
+        self.emprestimo_matricula.set("")
+        self.emprestimo_livro_id.set("")
