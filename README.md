@@ -1,97 +1,107 @@
 # BookReadNet
 
-BookReadNet é um sistema de biblioteca em Python criado para a disciplina de Programação Orientada a Objetos 1. O projeto mostra, na prática, como usar encapsulamento, herança, abstração, polimorfismo e relações entre objetos em um sistema funcional com Tkinter.
+O **BookReadNet** é uma biblioteca digital desktop para organizar e ler HQs, mangás e livros. O sistema foi desenvolvido em Python para demonstrar, de forma prática, Programação Orientada a Objetos, modularização, persistência e interface gráfica com Tkinter.
 
-## Resumo rápido para apresentação
+## Funcionalidades
 
-> O BookReadNet é um sistema de biblioteca desenvolvido em Python com foco em POO. Ele permite cadastrar livros e usuários, controlar empréstimos e devoluções, aplicar validações e exibir tudo em uma interface gráfica simples.
+- Importação de arquivos `.pdf`, `.cbz`, `.cbr` e `.cb7`
+- Cópia segura dos arquivos para a biblioteca gerenciada pelo sistema
+- Cadastro, edição, pesquisa, filtros e exclusão de obras
+- Classificação em HQ, Mangá ou Livro digital
+- Metadados de autor, categoria, série, editora, idioma, volume ou edição
+- Favoritos e status `Não iniciado`, `Em leitura` e `Lido`
+- Leitor integrado com página anterior, próxima página e zoom
+- Continuação automática da última página lida
+- Histórico de leitura e porcentagem de progresso
+- Persistência local em JSON
 
-## O que o sistema faz
+## Formatos
 
-- Cadastra livros
-- Cadastra usuários
-- Lista livros, usuários e empréstimos
-- Realiza empréstimos
-- Realiza devoluções
-- Exclui livros e usuários
-- Valida dados de entrada
-- Exibe mensagens de sucesso e erro na interface
+| Formato | Estrutura | Implementação |
+|---|---|---|
+| PDF | Documento paginado | PyMuPDF |
+| CBZ | Imagens compactadas em ZIP | Biblioteca padrão `zipfile` |
+| CBR | Imagens compactadas em RAR | `rarfile` |
+| CB7 | Imagens compactadas em 7-Zip | `py7zr` |
 
-## Conceitos de POO aplicados
+> **Observação sobre CBR:** o pacote Python `rarfile` pode precisar de um programa compatível instalado no Windows, como 7-Zip, UnRAR ou bsdtar, principalmente para arquivos RAR comprimidos. PDF, CBZ e CB7 funcionam somente com as dependências do projeto.
 
-- Encapsulamento com atributos privados e `@property`
-- Herança entre `Pessoa`, `Usuario` e `Bibliotecario`
-- Abstração com `abc` e `@abstractmethod`
-- Polimorfismo no método `exibir_dados()`
-- Associação entre usuário, livro e empréstimo
-- Agregação da biblioteca com seus registros
+## Conceitos de POO
 
-## Estrutura do projeto
+- **Abstração:** `ObraDigital` e `LeitorArquivo` são classes abstratas.
+- **Herança:** `HQ`, `Manga` e `LivroDigital` herdam de `ObraDigital`.
+- **Polimorfismo:** `LeitorPDF`, `LeitorCBZ`, `LeitorCBR` e `LeitorCB7` implementam a mesma interface de leitura.
+- **Encapsulamento:** os modelos usam atributos privados e propriedades para validar alterações.
+- **Agregação:** `BibliotecaDigital` administra um conjunto de obras.
+- **Composição:** o usuário local possui seus progressos e registros de histórico.
+- **Associação:** o progresso relaciona o leitor a uma obra por seu identificador.
 
-- `modelos.py`: classes de domínio
-- `servicos.py`: regras de negócio da biblioteca
-- `interface.py`: interface gráfica Tkinter
-- `main.py`: ponto de entrada e demonstração inicial
-- `tests/`: testes automatizados das regras principais
-- `run.bat`: atalho para abrir o sistema no Windows
+## Arquitetura
 
-## Como executar
-
-### Requisitos
-
-- Python 3.10 ou superior
-
-### Instalação
-
-```bash
-pip install -r requirements.txt
+```text
+main.py
+  └── interface.py         Tkinter e interação com o usuário
+        └── servicos.py    Regras do acervo e da leitura
+              ├── modelos.py       Entidades e regras dos objetos
+              ├── leitor.py        Leitores PDF/CBZ/CBR/CB7
+              ├── persistencia.py  Repositório JSON
+              └── validacoes.py    Arquivos e formatos aceitos
 ```
 
-### Execução
+Arquivos gerados durante o uso:
+
+```text
+dados/bookreadnet.json
+biblioteca/arquivos/
+biblioteca/capas/
+```
+
+## Instalação
+
+Requer Python 3.10 ou superior.
+
+```bash
+python -m pip install -r requirements.txt
+```
+
+No Windows, também é possível usar:
+
+```bat
+run.bat
+```
+
+## Execução
 
 ```bash
 python main.py
 ```
 
-Ou, no Windows:
+Na primeira execução, as pastas de dados e do acervo são criadas automaticamente.
+
+## Testes
 
 ```bash
-run.bat
+python -m pytest -v
 ```
 
-### Testes
+Os testes cobrem cadastro, duplicidade, cópia de arquivos, pesquisa, filtros, favoritos, progresso, histórico, persistência, exclusão e leitura de CBZ.
 
-```bash
-pytest
-```
+## Como demonstrar
 
-## Roteiro de demonstração oral
+1. Abrir o BookReadNet e apresentar o painel do acervo.
+2. Importar uma HQ ou mangá em PDF, CBZ, CBR ou CB7.
+3. Mostrar os metadados e os filtros por tipo e status.
+4. Favoritar a obra.
+5. Abrir o leitor e avançar algumas páginas.
+6. Fechar o leitor e mostrar a obra em `Continuar lendo`.
+7. Abrir novamente e comprovar que a página foi restaurada.
+8. Mostrar o histórico e o arquivo JSON salvo.
+9. Explicar a fábrica de leitores como exemplo de polimorfismo.
 
-1. Apresentar o nome do sistema e o objetivo do projeto
-2. Explicar rapidamente a divisão dos arquivos
-3. Mostrar as classes principais e os conceitos de POO usados
-4. Abrir a interface e cadastrar um livro
-5. Cadastrar um usuário
-6. Realizar um empréstimo
-7. Mostrar que o livro fica indisponível
-8. Tentar emprestar o mesmo livro novamente para mostrar a validação
-9. Fazer a devolução
-10. Mostrar o livro disponível novamente
+## Fala curta para apresentação
 
-## Texto curto para a fala do grupo
+> O BookReadNet começou como um sistema tradicional de biblioteca e evoluiu para uma biblioteca digital pessoal. A interface apenas recebe as ações do usuário; as regras ficam na classe BibliotecaDigital, os dados nas classes de modelo e cada formato possui seu próprio leitor. Com isso, conseguimos demonstrar abstração, herança, encapsulamento e polimorfismo em uma funcionalidade real: abrir uma obra, navegar pelas páginas e continuar depois exatamente de onde o usuário parou.
 
-> O nosso sistema, BookReadNet, foi desenvolvido para organizar o fluxo básico de uma biblioteca. Primeiro modelamos as entidades com POO, depois centralizamos as regras de negócio em uma classe de serviço e por fim criamos a interface gráfica com Tkinter. Assim, a interface apenas chama os métodos do sistema, enquanto a lógica fica separada e organizada.
+## Planejamento
 
-## Pontos para destacar na apresentação
-
-- A interface não contém regra de negócio
-- As validações estão concentradas na camada de serviço e nos modelos
-- Os testes confirmam os fluxos principais do sistema
-- O projeto foi estruturado para ser simples de explicar e demonstrar
-
-## Sugestão de ordem de fala
-
-- Pessoa 1: objetivo e estrutura do projeto
-- Pessoa 2: classes e POO
-- Pessoa 3: regras de negócio e testes
-- Pessoa 4: interface e demonstração final
+O andamento das fases e as próximas evoluções estão em [ROADMAP.md](ROADMAP.md).

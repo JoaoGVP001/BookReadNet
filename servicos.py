@@ -1,94 +1,221 @@
 from __future__ import annotations
 
-from datetime import date
+from pathlib import Path
+import shutil
+from typing import Any
+from uuid import uuid4
 
-from modelos import Bibliotecario, Emprestimo, Livro, Usuario
+from leitor import FabricaLeitores, LeitorArquivo
+from modelos import HQ, Manga, LivroDigital, ObraDigital, StatusLeitura, Usuario
+from persistencia import RepositorioJSON
+from validacoes import validar_arquivo, validar_capa, validar_titulo
 
 
-class Biblioteca:
-    def __init__(self, nome: str) -> None:
-        self.nome = nome
-        self.__livros: list[Livro] = []
-        self.__usuarios: list[Usuario] = []
-        self.__bibliotecarios: list[Bibliotecario] = []
-        self.__emprestimos: list[Emprestimo] = []
+class BibliotecaDigital:
+    TIPOS_OBRA = {"HQ": HQ, "Mangá": Manga, "Livro digital": LivroDigital}
+
+    def __init__(self, nome: str, pasta_base: str | Path | None = None) -> None:
+        self.nome = nome.strip() or "BookReadNet"
+        self.pasta_base = Path(pasta_base or Path(__file__).parent).resolve()
+        self.pasta_arquivos = self.pasta_base / "biblioteca" / "arquivos"
+        self.pasta_capas = self.pasta_base / "biblioteca" / "capas"
+        self.pasta_dados = self.pasta_base / "dados"
+        self.pasta_arquivos.mkdir(parents=True, exist_ok=True)
+        self.pasta_capas.mkdir(parents=True, exist_ok=True)
+        self.repositorio = RepositorioJSON(self.pasta_dados / "bookreadnet.json")
+        self.__obras, self.usuario = self.repositorio.carregar()
 
     @property
-    def livros(self) -> list[Livro]:
-        return list(self.__livros)
+    def obras(self) -> list[ObraDigital]:
+        return list(self.__obras)
 
-    @property
-    def usuarios(self) -> list[Usuario]:
-        return list(self.__usuarios)
+    def cadastrar_obra(
+        self,
+        tipo: str,
+        titulo: str,
+        autor: str,
+        caminho_arquivo: str,
+        categoria: str = "Sem categoria",
+        serie: str = "",
+        editora: str = "",
+        idioma: str = "Português",
+        caminho_capa: str = "",
+        copiar_arquivo: bool = True,
+        **dados_especificos: Any,
+    ) -> ObraDigital:
+        titulo = validar_titulo(titulo)
+        origem = validar_arquivo(caminho_arquivo)
+        classe = self.TIPOS_OBRA.get(tipo)
+        if classe is None:
+            raise ValueError("Selecione um tipo de obra válido.")
 
-    @property
-    def emprestimos(self) -> list[Emprestimo]:
-        return list(self.__emprestimos)
+        id_obra = uuid4().hex[:10].upper()
+        destino = self._copiar_para_biblioteca(origem, self.pasta_arquivos, id_obra) if copiar_arquivo else origem
+        destino_capa = ""
+        try:
+            if caminho_capa:
+                capa = validar_capa(caminho_capa)
+                destino_capa = str(self._copiar_para_biblioteca(capa, self.pasta_capas, id_obra))
+            obra = classe(
+                id_obra=id_obra,
+                titulo=titulo,
+                autor=autor,
+                caminho_arquivo=str(destino),
+                categoria=categoria,
+                serie=serie,
+                editora=editora,
+                idioma=idioma,
+                caminho_capa=destino_capa,
+                **dados_especificos,
+            )
+            self._validar_duplicidade(obra)
+            self.__obras.append(obra)
+            self.salvar()
+            return obra
+        except Exception:
+            if copiar_arquivo and destino.exists():
+                destino.unlink(missing_ok=True)
+            if destino_capa:
+                Path(destino_capa).unlink(missing_ok=True)
+            raise
 
-    def cadastrar_livro(self, livro: Livro) -> None:
-        if any(item.id_livro == livro.id_livro for item in self.__livros):
-            raise ValueError("Já existe um livro com esse ID.")
-        self.__livros.append(livro)
+    def editar_obra(self, id_obra: str, **alteracoes: Any) -> ObraDigital:
+        obra = self.buscar_por_id(id_obra)
+        campos_editaveis = {"titulo", "autor", "categoria", "serie", "editora", "idioma"}
+        for campo, valor in alteracoes.items():
+            if campo in campos_editaveis or hasattr(obra, campo):
+                setattr(obra, campo, valor)
+        self._validar_duplicidade(obra, ignorar_id=obra.id_obra)
+        self.salvar()
+        return obra
 
-    def cadastrar_usuario(self, usuario: Usuario) -> None:
-        if any(item.matricula == usuario.matricula for item in self.__usuarios):
-            raise ValueError("Já existe um usuário com essa matrícula.")
-        self.__usuarios.append(usuario)
+    def excluir_obra(self, id_obra: str, excluir_arquivo: bool = False) -> ObraDigital:
+        obra = self.buscar_por_id(id_obra)
+        self.__obras.remove(obra)
+        self.usuario.remover_dados_obra(id_obra)
+        self.salvar()
+        if excluir_arquivo:
+            self._excluir_arquivo_gerenciado(obra.caminho_arquivo, self.pasta_arquivos)
+            if obra.caminho_capa:
+                self._excluir_arquivo_gerenciado(obra.caminho_capa, self.pasta_capas)
+        return obra
 
-    def cadastrar_bibliotecario(self, bibliotecario: Bibliotecario) -> None:
-        self.__bibliotecarios.append(bibliotecario)
+    def buscar_por_id(self, id_obra: str) -> ObraDigital:
+        for obra in self.__obras:
+            if obra.id_obra == id_obra:
+                return obra
+        raise ValueError("Obra não encontrada.")
 
-    def buscar_livro_por_id(self, id_livro: str) -> Livro:
-        for livro in self.__livros:
-            if livro.id_livro == id_livro:
-                return livro
-        raise ValueError("Livro não encontrado.")
+    def pesquisar(self, termo: str = "") -> list[ObraDigital]:
+        termo = termo.strip().casefold()
+        if not termo:
+            return self.obras
+        return [
+            obra
+            for obra in self.__obras
+            if termo in obra.titulo.casefold()
+            or termo in obra.autor.casefold()
+            or termo in obra.categoria.casefold()
+            or termo in obra.serie.casefold()
+        ]
 
-    def buscar_usuario_por_matricula(self, matricula: str) -> Usuario:
-        for usuario in self.__usuarios:
-            if usuario.matricula == matricula:
-                return usuario
-        raise ValueError("Usuário não encontrado.")
+    def filtrar(
+        self,
+        termo: str = "",
+        tipo: str = "Todos",
+        status: str = "Todos",
+        somente_favoritos: bool = False,
+    ) -> list[ObraDigital]:
+        obras = self.pesquisar(termo)
+        if tipo != "Todos":
+            obras = [obra for obra in obras if obra.obter_tipo() == tipo]
+        if status != "Todos":
+            obras = [obra for obra in obras if obra.status_leitura.value == status]
+        if somente_favoritos:
+            obras = [obra for obra in obras if obra.favorito]
+        return sorted(obras, key=lambda obra: obra.titulo.casefold())
 
-    def remover_livro(self, id_livro: str) -> None:
-        livro = self.buscar_livro_por_id(id_livro)
-        if not livro.disponivel:
-            raise ValueError("Não é possível excluir um livro emprestado.")
-        self.__livros.remove(livro)
+    def alternar_favorito(self, id_obra: str) -> bool:
+        obra = self.buscar_por_id(id_obra)
+        obra.favorito = not obra.favorito
+        self.salvar()
+        return obra.favorito
 
-    def remover_usuario(self, matricula: str) -> None:
-        usuario = self.buscar_usuario_por_matricula(matricula)
-        if usuario.livros_emprestados:
-            raise ValueError("Não é possível excluir usuário com livros emprestados.")
-        self.__usuarios.remove(usuario)
+    def criar_leitor(self, id_obra: str) -> LeitorArquivo:
+        obra = self.buscar_por_id(id_obra)
+        return FabricaLeitores.criar(obra.caminho_arquivo)
 
-    def emprestar_livro(self, matricula: str, id_livro: str) -> Emprestimo:
-        usuario = self.buscar_usuario_por_matricula(matricula)
-        livro = self.buscar_livro_por_id(id_livro)
-        if not livro.disponivel:
-            raise ValueError("Livro indisponível.")
-        livro.emprestar()
-        usuario.adicionar_livro(livro)
-        emprestimo = Emprestimo(usuario, livro, str(date.today()))
-        self.__emprestimos.append(emprestimo)
-        return emprestimo
+    def obter_progresso(self, id_obra: str):
+        self.buscar_por_id(id_obra)
+        return self.usuario.obter_progresso(id_obra)
 
-    def devolver_livro(self, matricula: str, id_livro: str) -> Emprestimo:
-        usuario = self.buscar_usuario_por_matricula(matricula)
-        livro = self.buscar_livro_por_id(id_livro)
-        for emprestimo in self.__emprestimos:
-            if emprestimo.usuario == usuario and emprestimo.livro == livro and emprestimo.data_devolucao is None:
-                livro.devolver()
-                usuario.remover_livro(livro)
-                emprestimo.registrar_devolucao(str(date.today()))
-                return emprestimo
-        raise ValueError("Empréstimo não encontrado para devolução.")
+    def salvar_progresso(self, id_obra: str, pagina: int, total_paginas: int):
+        obra = self.buscar_por_id(id_obra)
+        progresso = self.usuario.salvar_progresso(id_obra, pagina, total_paginas)
+        obra.numero_paginas = total_paginas
+        obra.status_leitura = progresso.status
+        self.salvar()
+        return progresso
 
-    def listar_livros(self) -> list[str]:
-        return [livro.exibir_dados() for livro in self.__livros]
+    def continuar_lendo(self) -> list[ObraDigital]:
+        progressos = self.usuario.progressos
+        candidatas = [
+            obra
+            for obra in self.__obras
+            if obra.id_obra in progressos and progressos[obra.id_obra].pagina_atual > 0
+        ]
+        return sorted(
+            candidatas,
+            key=lambda obra: progressos[obra.id_obra].ultima_leitura or "",
+            reverse=True,
+        )
 
-    def listar_usuarios(self) -> list[str]:
-        return [usuario.exibir_dados() for usuario in self.__usuarios]
+    def listar_historico(self) -> list[str]:
+        linhas: list[str] = []
+        for item in reversed(self.usuario.historico):
+            try:
+                titulo = self.buscar_por_id(item.obra_id).titulo
+            except ValueError:
+                continue
+            data = item.data.replace("T", " ")[:16]
+            linhas.append(f"{data} | {titulo} | página {item.pagina}")
+        return linhas
 
-    def listar_emprestimos(self) -> list[str]:
-        return [emprestimo.exibir_dados() for emprestimo in self.__emprestimos]
+    def categorias(self) -> list[str]:
+        return sorted({obra.categoria for obra in self.__obras}, key=str.casefold)
+
+    def salvar(self) -> None:
+        self.repositorio.salvar(self.__obras, self.usuario)
+
+    def _validar_duplicidade(self, nova_obra: ObraDigital, ignorar_id: str | None = None) -> None:
+        for obra in self.__obras:
+            if obra.id_obra == ignorar_id:
+                continue
+            mesma_base = (
+                obra.titulo.casefold() == nova_obra.titulo.casefold()
+                and obra.autor.casefold() == nova_obra.autor.casefold()
+                and obra.obter_tipo() == nova_obra.obter_tipo()
+            )
+            if mesma_base and obra.dados_especificos() == nova_obra.dados_especificos():
+                raise ValueError("Esta obra já está cadastrada no acervo.")
+
+    @staticmethod
+    def _copiar_para_biblioteca(origem: Path, pasta: Path, prefixo: str) -> Path:
+        pasta.mkdir(parents=True, exist_ok=True)
+        destino = pasta / f"{prefixo}_{origem.name}"
+        if origem.resolve() != destino.resolve():
+            shutil.copy2(origem, destino)
+        return destino.resolve()
+
+    @staticmethod
+    def _excluir_arquivo_gerenciado(caminho: str, pasta_permitida: Path) -> None:
+        arquivo = Path(caminho).resolve()
+        try:
+            arquivo.relative_to(pasta_permitida.resolve())
+        except ValueError:
+            return
+        arquivo.unlink(missing_ok=True)
+
+
+# Nome curto mantido para facilitar exemplos acadêmicos e imports antigos.
+Biblioteca = BibliotecaDigital
